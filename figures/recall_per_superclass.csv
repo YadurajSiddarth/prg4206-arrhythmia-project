@@ -1,0 +1,5 @@
+,n_test_records,recall
+MI,200,0.71
+STTC,185,0.692
+CD,169,0.751
+HYP,109,0.679

@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+.DS_Store
+# trained model binaries (the web page uses docs/model.js instead)
+models/
+*.joblib

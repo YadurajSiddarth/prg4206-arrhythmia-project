@@ -1,0 +1,4 @@
+Model,CV ROC-AUC mean,CV ROC-AUC std
+Logistic Regression,0.7797,0.0092
+Random Forest,0.8213,0.0084
+XGBoost,0.8265,0.0148

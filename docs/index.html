@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ECG Normal vs Abnormal – research prototype</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="wrap">
+    <h1>ECG normal vs abnormal <span class="tag">research prototype</span></h1>
+    <p class="sub">Explainable machine learning on the PTB-XL dataset · lead-II extracted features · XGBoost with SHAP explanations</p>
+    <div class="disclaimer" role="alert">
+      <strong>Not a clinical diagnostic tool.</strong> This is a student research prototype. It must never be used
+      to diagnose, treat or make any medical decision. Always consult a qualified clinician.
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="card" aria-labelledby="in-h">
+      <h2 id="in-h">1 · Choose an input</h2>
+      <div class="tabs" role="tablist" aria-label="Input type">
+        <button role="tab" id="tab-demo" aria-controls="panel-demo" aria-selected="true">Demo record</button>
+        <button role="tab" id="tab-csv" aria-controls="panel-csv" aria-selected="false">Upload feature CSV</button>
+        <button role="tab" id="tab-record" aria-controls="panel-record" aria-selected="false">Upload ECG record</button>
+        <button role="tab" id="tab-manual" aria-controls="panel-manual" aria-selected="false">Manual entry</button>
+      </div>
+
+      <div id="panel-demo" role="tabpanel" aria-labelledby="tab-demo">
+        <label for="demo-select">Held-out test record (never used for training)</label>
+        <select id="demo-select"></select>
+      </div>
+
+      <div id="panel-csv" role="tabpanel" aria-labelledby="tab-csv" hidden>
+        <label for="csv-file">CSV with a header row and the model's feature columns</label>
+        <input type="file" id="csv-file" accept=".csv,text/csv">
+        <p class="hint">You can upload a single-row file or a whole table such as <code>data/features.csv</code>; then choose the record to analyse.
+          Extra columns (ids, split, labels) are ignored by the model. Empty cells count as missing values.</p>
+        <div id="csv-picker" hidden>
+          <div class="row picker">
+            <div><label for="csv-split">Split</label><select id="csv-split"></select></div>
+            <div class="grow"><label for="csv-row">Record</label><select id="csv-row"></select></div>
+            <button id="csv-random" class="secondary" type="button">Random record</button>
+          </div>
+          <p id="csv-info" class="hint"></p>
+        </div>
+      </div>
+
+      <div id="panel-record" role="tabpanel" aria-labelledby="tab-record" hidden>
+        <label for="rec-files">Raw ECG record: select both the .hea and the .dat file</label>
+        <input type="file" id="rec-files" accept=".hea,.dat" multiple>
+        <p class="hint">PTB-XL 100 Hz records only (the “_lr” files, for example <code>00001_lr.hea</code> and <code>00001_lr.dat</code>).
+          The features are extracted with the same processing as in training; nothing is uploaded.</p>
+      </div>
+
+      <div id="panel-manual" role="tabpanel" aria-labelledby="tab-manual" hidden>
+        <div class="row">
+          <button id="fill-typical" class="secondary" type="button">Fill with typical values</button>
+          <button id="clear-form" class="secondary" type="button">Clear</button>
+          <button id="predict-manual" type="button">Predict</button>
+        </div>
+        <p class="hint">Leave a field blank to treat it as missing. Amplitudes are in mV. Placeholders show the training median.</p>
+        <div id="manual-grid" class="grid"></div>
+      </div>
+      <p id="error" class="error" role="alert" hidden></p>
+    </section>
+
+    <section class="card" id="result" aria-live="polite" hidden>
+      <h2>2 · Result</h2>
+      <div class="result-top">
+        <div>
+          <div class="label">Predicted class</div>
+          <div id="badge" class="badge">–</div>
+        </div>
+        <div class="meter-wrap">
+          <div class="label">Probability of abnormal: <strong id="prob">–</strong>
+            · confidence in this class: <strong id="conf">–</strong></div>
+          <div class="meter" aria-hidden="true"><div id="meter-fill"></div><div class="tick"></div></div>
+          <div class="scale"><span>0% (normal)</span><span>50%</span><span>100% (abnormal)</span></div>
+        </div>
+      </div>
+      <p id="truth" class="hint" hidden></p>
+      <div id="ecg-plot-wrap" hidden>
+        <h3>Lead II, 10 seconds</h3>
+        <svg id="ecg-plot" class="plot" viewBox="0 0 800 220" role="img" aria-label="Lead II ECG trace with detected R peaks"></svg>
+        <p class="hint">Light line: raw signal. Dark line: after the 0.5–40 Hz band-pass filter. Red dots: detected R peaks.</p>
+      </div>
+      <p id="missing-note" class="hint" hidden></p>
+
+      <h3>Which features influenced this prediction?</h3>
+      <p class="hint">SHAP values in log-odds. <span class="key abn">Red</span> pushes towards <b>abnormal</b>,
+        <span class="key nrm">blue</span> pushes towards <b>normal</b>. Bars show the 10 strongest features.</p>
+      <div id="bars" class="bars"></div>
+      <details>
+        <summary>All features</summary>
+        <div class="table-scroll"><table id="all-features"></table></div>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>About this model</h2>
+      <p id="about"></p>
+      <div class="table-scroll"><table id="metrics"></table></div>
+      <p class="hint">Metrics are on the held-out test fold (PTB-XL fold 10) at a 0.5 threshold. The deployed model is XGBoost.</p>
+      <h3>Limitations</h3>
+      <ul>
+        <li>Binary label only: “normal” means the diagnostic superclass is NORM; anything else is “abnormal”.</li>
+        <li>Uses hand-crafted features from a single 10-second lead; no clinical validation or external test set.</li>
+        <li>PTB-XL labels come from cardiologist reports and can be noisy; results may not transfer to other devices or populations.</li>
+        <li>SHAP shows how the model reasons, not whether the reasoning is medically correct.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="wrap">
+    <span id="selftest" class="pill">Model self-test: running…</span>
+    <p class="hint"> By Yaduraj Siddarth, <br> 
+    
+      Data: PTB-XL v1.0.3 (Wagner et al., Scientific Data 2020), PhysioNet, CC BY 4.0.</p>
+  </footer>
+
+  <script src="model.js"></script>
+  <script src="engine.js"></script>
+  <script src="ecg-extract.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
