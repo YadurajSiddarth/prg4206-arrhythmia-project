@@ -1,7 +1,0 @@
-venv/
-data/
-__pycache__/
-*.DS_Store
-*.png
-*.csv
-ecg_features_extracted.csv
