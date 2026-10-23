@@ -50,7 +50,7 @@
         <label for="rec-files">Raw ECG record: select both the .hea and the .dat file</label>
         <input type="file" id="rec-files" accept=".hea,.dat" multiple>
         <p class="hint">PTB-XL 100 Hz records only (the “_lr” files, for example <code>00001_lr.hea</code> and <code>00001_lr.dat</code>).
-          The features are extracted with the same processing as in training; nothing is uploaded.</p>
+          The features are extracted in your browser with the same processing as in training; nothing is uploaded.</p>
       </div>
 
       <div id="panel-manual" role="tabpanel" aria-labelledby="tab-manual" hidden>
@@ -101,22 +101,15 @@
       <h2>About this model</h2>
       <p id="about"></p>
       <div class="table-scroll"><table id="metrics"></table></div>
-      <p class="hint">Metrics are on the held-out test fold (PTB-XL fold 10) at a 0.5 threshold. The deployed model is XGBoost.</p>
+      <p class="hint">Metrics are on the held-out test fold (PTB-XL fold 10) at a 0.5 threshold. “AUC 95% CI” is a bootstrap interval over the test records. The deployed model is XGBoost.</p>
       <h3>Limitations</h3>
-      <ul>
-        <li>Binary label only: “normal” means the diagnostic superclass is NORM; anything else is “abnormal”.</li>
-        <li>Uses hand-crafted features from a single 10-second lead; no clinical validation or external test set.</li>
-        <li>PTB-XL labels come from cardiologist reports and can be noisy; results may not transfer to other devices or populations.</li>
-        <li>SHAP shows how the model reasons, not whether the reasoning is medically correct.</li>
-      </ul>
+      <ul id="limits"></ul>
     </section>
   </main>
 
   <footer class="wrap">
     <span id="selftest" class="pill">Model self-test: running…</span>
-    <p class="hint"> By Yaduraj Siddarth, <br> 
-    
-      Data: PTB-XL v1.0.3 (Wagner et al., Scientific Data 2020), PhysioNet, CC BY 4.0.</p>
+    <p class="hint">Data: PTB-XL v1.0.3 (Wagner et al., Scientific Data 2020), PhysioNet, CC BY 4.0. Inference runs entirely in your browser; nothing is uploaded.</p>
   </footer>
 
   <script src="model.js"></script>

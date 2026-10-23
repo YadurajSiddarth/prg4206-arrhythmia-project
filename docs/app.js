@@ -256,19 +256,42 @@
     t.appendChild(foot);
   }
 
-  // ---------- about ----------
-  const m = M.meta;
-  $("about").textContent = `XGBoost classifier (${m.n_trees} trees) trained on ${m.n_train} ECG records from ${m.dataset}, ` +
-    `tuned on ${m.n_val} validation records and tested on ${m.n_test} held-out records. Features are extracted from ${m.leads.join(", ")} ` +
-    `(statistics, signal energy, frequency bands, R-peak and heart-rate-variability measures). All records of a patient stay in the same split.`;
+  // ---------- about (text is generated from the exported model so it always matches the numbers) ----------
+  const m = M.meta, xgbRow = M.metrics.find((r) => r.Model === "XGBoost");
+  const n = (v) => Number(v).toLocaleString("en-US");
+  const leadTxt = m.leads.length === 1 ? `Lead ${m.leads[0]}` : `leads ${m.leads.join(", ")}`;
+  let about = `XGBoost classifier trained on engineered ${leadTxt} ECG features from ${m.dataset}. ` +
+    `The experiment used ${n(m.n_train)} training records, ${n(m.n_val)} validation records and ${n(m.n_test)} held-out test records, ` +
+    `with ${n(m.n_train + m.n_val + m.n_test)} usable records in total. ` +
+    `The model uses ${F.length} statistical, temporal and frequency-domain features. ` +
+    `Patient records are kept within their designated data split. ` +
+    `Metrics are from the held-out test set at a 0.5 classification threshold. XGBoost is the selected model.`;
+  if (xgbRow && xgbRow["AUC 95% CI"]) about += ` ROC-AUC 95% bootstrap confidence interval: ${String(xgbRow["AUC 95% CI"]).replace("-", "–")}.`;
+  $("about").textContent = about;
+
+  const limits = [
+    "Binary classification: NORM versus abnormal ECGs.",
+    `Uses engineered features from ${m.leads.length === 1 ? leadTxt + " only" : leadTxt}.`,
+    "No external-dataset or clinical validation.",
+  ];
+  if (xgbRow && typeof xgbRow["Recall (sensitivity)"] === "number") {
+    limits.push(`About ${((1 - xgbRow["Recall (sensitivity)"]) * 100).toFixed(1)}% of abnormal test records were missed at the selected threshold.`);
+  }
+  limits.push("SHAP explains model behaviour, not medical correctness.");
+  limits.forEach((t) => $("limits").appendChild(el("li", null, t)));
+
   if (M.metrics.length) {
-    const cols = ["Model", "Accuracy", "Precision", "Recall (sensitivity)", "Specificity", "F1", "ROC-AUC"];
+    const wanted = ["Model", "Accuracy", "Precision", "Recall (sensitivity)", "Specificity", "F1", "ROC-AUC", "AUC 95% CI", "PR-AUC"];
+    const cols = wanted.filter((c) => c in M.metrics[0]);                       // show only the columns the export contains
     const t = $("metrics"), head = el("tr");
     cols.forEach((c, k) => head.appendChild(el("th", k ? "num" : "", c)));
     t.appendChild(head);
     M.metrics.forEach((row) => {
       const tr = el("tr", row.Model === "XGBoost" ? "hl" : "");
-      cols.forEach((c, k) => tr.appendChild(el("td", k ? "num" : "", k ? Number(row[c]).toFixed(3) : row[c])));
+      cols.forEach((c, k) => {
+        const v = row[c], text = typeof v === "number" ? v.toFixed(4) : String(v);   // numbers to 4 decimals, the CI stays text
+        tr.appendChild(el("td", k ? "num" : "", text));
+      });
       t.appendChild(tr);
     });
   }

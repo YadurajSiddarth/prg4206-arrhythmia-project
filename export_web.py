@@ -1,10 +1,18 @@
-"""Step 4 - export the trained XGBoost model to docs/model.js for the static web prototype.
+"""Export a trained XGBoost model to docs/model.js for the static web prototype.
 
-Run after train.py:   python export_web.py
+Two ways to use it
+  1) Locally, after train.py:            python export_web.py
+  2) From the Colab notebook (variables already in memory):
+         import export_web
+         export_web.export_model(model=fitted["XGBoost"], features=FEATURES, leads=LEADS, data=data,
+                                 metrics=results.reset_index().to_dict("records"), dest=f"{WORK}/model.js")
 
-The browser page (docs/index.html) runs the trees itself, so no Python server is needed and the
-page can be served by VS Code Live Server or GitHub Pages. This script CHECKS the export before
-writing it: the exported trees must reproduce XGBoost's own margins and probabilities.
+The browser page runs the trees itself, so no Python server is needed (VS Code Live Server / GitHub Pages).
+The export is CHECKED before it is written: the exported trees must reproduce XGBoost's own margins and
+probabilities, otherwise the script stops with an error.
+
+`data` must contain the feature columns plus: split ("train"/"val"/"test"), abnormal (0/1) and
+superclasses (either a list like ["MI", "STTC"] or a string like "MI|STTC").
 """
 import json
 import re
@@ -75,20 +83,23 @@ def nan_to_none(v):
     return None if (isinstance(v, float) and np.isnan(v)) else v
 
 
-def main():
-    import joblib
+def superclass_text(s):
+    if isinstance(s, (list, tuple)):
+        return ", ".join(s)
+    return str(s).replace("|", ", ")
+
+
+def export_model(model, features, leads, data, metrics=None, dest=None):
+    """Verify and write the web export. Returns the path written."""
     import xgboost as xgb
 
-    bundle = joblib.load(ROOT / "models" / "xgb_bundle.joblib")
-    model, FEATURES = bundle["model"], list(bundle["features"])
+    FEATURES = list(features)
     booster = model.get_booster()
-
     trees = [compact_tree(json.loads(d), FEATURES) for d in booster.get_dump(dump_format="json", with_stats=True)]
     print(f"Exported {len(trees)} trees, {sum(len(t['f']) for t in trees)} nodes")
 
-    data = pd.read_csv(ROOT / "data" / "features.csv", index_col="ecg_id")
-    test = data[data.split == "test"]
-    train = data[data.split == "train"]
+    test = data[data["split"] == "test"]
+    train = data[data["split"] == "train"]
     X = test[FEATURES]
 
     # ---- check 1: exported trees reproduce XGBoost margins (offset = base score in log-odds) ----
@@ -101,9 +112,9 @@ def main():
     prob = 1 / (1 + np.exp(-(sums + offset)))
     p_err = np.abs(prob - model.predict_proba(check)[:, 1]).max()
     assert p_err < 1e-3, f"probability mismatch {p_err:.2e}"
-    print(f"Check 1 passed: margin deviation {np.abs(diff - offset).max():.1e}, probability deviation {p_err:.1e}")
+    print(f"Check passed: margin deviation {np.abs(diff - offset).max():.1e}, probability deviation {p_err:.1e}")
 
-    # ---- self-test vectors: xgboost's own SHAP values for a few records (the page re-checks these on load) ----
+    # ---- self-test vectors: XGBoost's own SHAP values for a few records (the page re-checks them on load) ----
     st = X.head(5)
     contribs = booster.predict(xgb.DMatrix(st), pred_contribs=True)       # (n, features + bias)
     selftest = [{"x": [nan_to_none(float(v)) for v in row],
@@ -111,31 +122,41 @@ def main():
                 for row, c in zip(st.to_numpy(dtype=float), contribs)]
 
     # ---- demo records (held-out test split) + typical values for the manual form ----
-    demo = pd.concat([test[test.abnormal == 0].sample(5, random_state=SEED),
-                      test[test.abnormal == 1].sample(5, random_state=SEED)])
+    demo = pd.concat([test[test["abnormal"] == 0].sample(5, random_state=SEED),
+                      test[test["abnormal"] == 1].sample(5, random_state=SEED)])
     demo_list = [{"id": int(i), "label": "Abnormal" if r["abnormal"] else "Normal",
-                  "superclasses": r["superclasses"].replace("|", ", "),
-                  "x": [nan_to_none(sig(float(r[f]), 6)) if not pd.isna(r[f]) else None for f in FEATURES]}
+                  "superclasses": superclass_text(r["superclasses"]),
+                  "x": [None if pd.isna(r[f]) else sig(float(r[f]), 6) for f in FEATURES]}
                  for i, r in demo.iterrows()]
     stats = {f: {"median": sig(float(train[f].median()), 6), "p1": sig(float(train[f].quantile(0.01)), 6),
                  "p99": sig(float(train[f].quantile(0.99)), 6)} for f in FEATURES}
 
-    metrics = []
-    mc = ROOT / "figures" / "model_comparison.csv"
-    if mc.exists():
-        metrics = json.loads(pd.read_csv(mc).to_json(orient="records"))
+    metrics = json.loads(pd.DataFrame(metrics).to_json(orient="records")) if metrics else []
 
     out = {
         "features": FEATURES, "offset": offset, "trees": trees, "stats": stats, "demo": demo_list,
         "selftest": selftest, "metrics": metrics,
-        "meta": {"dataset": "PTB-XL v1.0.3", "leads": bundle["leads"], "n_trees": len(trees),
-                 "n_train": int((data.split == "train").sum()), "n_val": int((data.split == "val").sum()),
-                 "n_test": int((data.split == "test").sum())},
+        "meta": {"dataset": "PTB-XL v1.0.3", "leads": list(leads), "n_trees": len(trees),
+                 "n_train": int((data["split"] == "train").sum()), "n_val": int((data["split"] == "val").sum()),
+                 "n_test": int((data["split"] == "test").sum())},
     }
-    dest = ROOT / "docs" / "model.js"
-    dest.parent.mkdir(exist_ok=True)
+    dest = Path(dest) if dest else ROOT / "docs" / "model.js"
+    dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text("window.ECG_MODEL = " + json.dumps(out, separators=(",", ":"), allow_nan=False) + ";\n")
     print(f"Wrote {dest} ({dest.stat().st_size / 1e6:.2f} MB)")
+    print("Records:", out["meta"]["n_train"], "/", out["meta"]["n_val"], "/", out["meta"]["n_test"],
+          "| metrics rows:", len(metrics))
+    return dest
+
+
+def main():
+    import joblib
+
+    bundle = joblib.load(ROOT / "models" / "xgb_bundle.joblib")
+    data = pd.read_csv(ROOT / "data" / "features.csv", index_col="ecg_id")
+    mc = ROOT / "figures" / "model_comparison.csv"
+    metrics = pd.read_csv(mc).to_dict("records") if mc.exists() else None
+    export_model(bundle["model"], bundle["features"], bundle["leads"], data, metrics)
     print("Next: open docs/index.html with VS Code Live Server ('Go Live').")
 
 
