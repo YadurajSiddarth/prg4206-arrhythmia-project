@@ -5,7 +5,7 @@ XGBoost, SHAP explanations, and a static web prototype that runs the model **in 
 
 > **Not a clinical diagnostic tool.** Student research prototype only.
 
-**Live demo:** `https://<your-username>.github.io/<repo-name>/` (GitHub Pages, served from the `docs/` folder)
+**Live demo:** `https://yadurajsiddarth.github.io/prg4206-arrhythmia-project/` (GitHub Pages, served from the `docs/` folder)
 
 ## Pipeline (macOS / Linux)
 ```bash
